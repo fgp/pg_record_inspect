@@ -11,15 +11,26 @@ create type fieldinfo as (
 );
 
 create function fieldinfos(record) returns fieldinfo[] as
-	'/Users/fgp/Versioned/fgp/projects/pg_record_support/record_inspect', 'record_inspect_fieldinfos'
+	'$libdir/record_inspect', 'record_inspect_fieldinfos'
 language 'C' strict immutable;
+comment on function fieldinfos(record) is
+'Returns an array of <fieldinfo>s describing the record''s fields';
 
 create function fieldvalue(record, field name, defval anyelement, coerce boolean default true) returns anyelement as
-	'/Users/fgp/Versioned/fgp/projects/pg_record_support/record_inspect', 'record_inspect_fieldvalue'
+	'$libdir/record_inspect', 'record_inspect_fieldvalue'
 language 'C' immutable;
+comment on function fieldvalue(record, name, anyelement, boolean)  is
+'Returns the value of the field <field>, or <defval> should the value be null.
+If <coerce> is true, the value is coerced to <defval>''s type if possible,
+otherwise an error is raised if the field''s type and <defval>''s type differ.';
 
 create function fieldvalues(record, defval anyelement, coerce boolean default true) returns anyarray as
-	'/Users/fgp/Versioned/fgp/projects/pg_record_support/record_inspect', 'record_inspect_fieldvalues'
+	'$libdir/record_inspect', 'record_inspect_fieldvalues'
 language 'C' immutable;
+comment on  function fieldvalues(record, anyelement, boolean) is
+'Returns an array containing values of the record'' fields.
+NULL values are replaced by <defval>. If <coerce> is false, only
+the fields with the same type as <defval> are considered. Otherwise,
+the field'' values are coerced if possible, or an error is raised if not.';
 
 commit;

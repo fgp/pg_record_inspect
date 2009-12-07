@@ -1,0 +1,40 @@
+record_inspect defines functions which allow introspection of record and
+composite types from PL/pgSQL and PL/SQL. record_inspect defines the following
+database objects, all in the schema record_inspect.
+
+* fieldinfo [composite type]
+  Used to by fieldinfos() to describe a record's fields. Contains the fields
+    fieldname (name),
+    fieldtype (regclass),
+    fieldtypemod (int)
+
+* fieldinfo[] fieldinfos(record)
+  Returns an array of <fieldinfo>s describing the record''s fields
+
+* anyelement fieldvalue(record, field name, defval anyelement, coerce boolean)
+  Returns the value of the field <field>, or <defval> should the value be
+  null. If <coerce> is true, the value is coerced to <defval>'s type if
+  possible, otherwise an error is raised if the field''s type and <defval>'s
+  type differ.
+
+* anyelement fieldvalues(record, defval anyelement, coerce boolean)
+  Returns an array containing values of the record'' fields. NULL values are
+  replaced by <defval>. If <coerce> is false, only the fields with the same
+  type as <defval> are considered. Otherwise, the field'' values are coerced
+  if possible, or an error is raised if not.
+
+Installation:
+-------------
+Do
+  make install
+or
+  make PG_CONFIG=/path/to/your/pg_config install
+This will install record_inspect.so into <prefix>/lib (or
+<prefix>/lib/postgresql) and record_inspect.sql into <prefix>/share/contrib
+(or <prefix>/share/postgresql/contrib).
+
+Before you're able to use record_inspect from a specific database,
+you need to register the types and functions of record_inspect
+with that database. This is what record_inspect.sql is for. Simply
+do
+  psql your_database < record_inspect.sql
