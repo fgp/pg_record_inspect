@@ -4,7 +4,7 @@ create schema record_inspect_test;
 set search_path=record_inspect_test;
 
 -- Get field infos for anonymous record type
-select record_inspect.fieldinfos(row('Hello, World', i::text, i, i::bigint))
+select record_inspect.fieldinfos(row('Hello, World', 'foobar'::varchar(3), i::text, i, i::bigint))
 	from generate_series(1,2) i;
 	
 -- Get field value as varchar(4)
@@ -48,11 +48,16 @@ begin
 	v_xml := array_to_string(array(
 		select
 			'<' || f.fieldname || ' '
-				'type=' || quote_ident(f.fieldtype::text) || ' ' ||
-				'mod=' || f.fieldtypemod ||
-			'>' || replace(replace(
+				'type=' || quote_ident(f.fieldtype::text) ||
+				coalesce(
+					' mod="' || replace(f.fieldtypemod, '"', E'\\"') || '"',
+					''
+				) ||
+			'>' ||
+			replace(replace(
 				record_inspect.fieldvalue(OLD, f.fieldname, NULL::text),
-			'<', '&lt;'), '>', '&gt;') ||
+				'<', '&lt;'), '>', '&gt;'
+			) ||
 			'<' || f.fieldname || '/>'
 		from unnest(record_inspect.fieldinfos(OLD)) f
 	), '');

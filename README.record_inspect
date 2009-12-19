@@ -6,7 +6,7 @@ database objects, all in the schema record_inspect.
   Used to by fieldinfos() to describe a record's fields. Contains the fields
     fieldname (name),
     fieldtype (regclass),
-    fieldtypemod (int)
+    fieldtypemod (varchar)
 
 * fieldinfo[] fieldinfos(record)
   Returns an array of <fieldinfo>s describing the record''s fields

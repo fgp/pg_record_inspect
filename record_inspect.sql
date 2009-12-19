@@ -7,7 +7,7 @@ set search_path=record_inspect,pg_catalog;
 create type fieldinfo as (
 	fieldname		name,
 	fieldtype		regtype,
-	fieldtypemod	int
+	fieldtypemod	varchar
 );
 
 create function fieldinfos(record) returns fieldinfo[] as

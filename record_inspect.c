@@ -32,6 +32,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "utils/elog.h"
 #include "utils/memutils.h"
 #include "utils/array.h"
+#include "utils/syscache.h"
 #include "utils/lsyscache.h"
 #include "utils/typcache.h"
 #include "catalog/pg_type.h"
@@ -46,6 +47,54 @@ PG_MODULE_MAGIC;
 Datum record_inspect_fieldinfos(PG_FUNCTION_ARGS);
 Datum record_inspect_fieldvalue(PG_FUNCTION_ARGS);
 Datum record_inspect_fieldvalues(PG_FUNCTION_ARGS);
+
+/*
+ * This combines get_typmodout (from lsyscache.h, but disabled there
+ * with #ifndef NOT_USED) and printTypmod (from format_type.c, but
+ * static there). Should this ever become part of either contrib,
+ * or even postgres proper, this code duplication should be adressed
+ */
+static char * format_typmod(Oid typid, int32 typmod)
+{
+	HeapTuple	tp;
+	Oid			typmodout;
+	char		*res;
+
+	/* Shouldn't be called if typmod is -1 */
+	Assert(typmod >= 0);
+
+	/* Get typmodout */
+
+	tp = SearchSysCache(TYPEOID,
+						ObjectIdGetDatum(typid),
+						0, 0, 0);
+	if (HeapTupleIsValid(tp))
+	{
+		Form_pg_type typtup = (Form_pg_type) GETSTRUCT(tp);
+		typmodout = typtup->typmodout;
+		ReleaseSysCache(tp);
+	}
+	else
+		elog(ERROR, "cache lookup failed for type %u", typid);
+
+	/* Generate string representation */
+
+	if (typmodout == InvalidOid)
+	{
+		/* Default behavior: just print the integer typmod with parens.
+		   NOTE: A int32 needs at most 11 bytes in decimal notation */
+		res = palloc(11 + 2 + 1);
+		snprintf(res, 11 + 2 + 1, "(%d)", typmod);
+	}
+	else
+	{
+		/* Use the type-specific typmodout procedure */
+		res = DatumGetCString(OidFunctionCall1(typmodout,
+		                                       Int32GetDatum(typmod)));
+	}
+
+	return res;
+}
 
 PG_FUNCTION_INFO_V1(record_inspect_fieldinfos);
 Datum record_inspect_fieldinfos(PG_FUNCTION_ARGS)
@@ -192,14 +241,27 @@ Datum record_inspect_fieldinfos(PG_FUNCTION_ARGS)
 		       &(rec_desc->attrs[i]->attname),
 		       NAMEDATALEN);
 		
-		/* Get Datum representations of name, typoid and typmod */
+		/* Get Datum representations of name and typoid */
+
 		recinf_values[0] = NameGetDatum(&(my_cache->names[nitems]));
+		recinf_nulls[0] = false;
+
 		recinf_values[1] = ObjectIdGetDatum(rec_desc->attrs[i]->atttypid);
-		recinf_values[2] = Int32GetDatum(rec_desc->attrs[i]->atttypmod);
+		recinf_nulls[1] = false;
+
+		/* Get external typmod representation */
+		if (rec_desc->attrs[i]->atttypmod >= 0)
+		{
+			recinf_values[2] = PointerGetDatum(cstring_to_text(format_typmod(rec_desc->attrs[i]->atttypid,
+			                                                                 rec_desc->attrs[i]->atttypmod)));
+			recinf_nulls[2] = false;
+		}
+		else
+			recinf_nulls[2] = true;
 		
 		/* Build tuple and store into recinfs.
 		   FIXME: Is this safe? record_in copies the data out of tuple.t_data
-		   on the grounds the they're allocated as part of a larger chunk, but
+		   'cause they're allocated as part of a larger chunk, but
 		   might be pfree'd individually. 
 		 */
 		recinf = heap_form_tuple(my_cache->recinf_desc, recinf_values, recinf_nulls);
