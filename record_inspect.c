@@ -283,11 +283,12 @@ Datum record_inspect_fieldinfos(PG_FUNCTION_ARGS)
 	/* Restore previous context */
 	MemoryContextSwitchTo(cxt_old);
 
-	/* FIXME: Is this safe? record_in at least expects it's result to be free'd, so
-	   maybe we should call construct_array on each invokation? But then, whats the
-	   point of freeing an array but not it's elements?
+	/* Return a copy of the cached array.
+	   XXX: Would it be OK to return the cache entry directly? record_in at
+	        least expects it's result to be pfree'd, so probably not...
+	        But than, record_in might be a special case here...
 	 */
-	PG_RETURN_ARRAYTYPE_P(my_cache->result);
+	PG_RETURN_ARRAYTYPE_P(DatumGetArrayTypePCopy(PointerGetDatum(my_cache->result)));
 }
 
 typedef struct CastPlan {
