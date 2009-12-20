@@ -1,6 +1,5 @@
 begin;
 
-drop schema if exists record_inspect cascade;
 create schema record_inspect;
 set search_path=record_inspect,pg_catalog;
 

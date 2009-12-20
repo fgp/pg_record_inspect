@@ -1,0 +1,146 @@
+\i record_inspect.sql
+begin;
+create schema record_inspect;
+set search_path=record_inspect,pg_catalog;
+create type fieldinfo as (
+	fieldname		name,
+	fieldtype		regtype,
+	fieldtypemod	varchar
+);
+create function fieldinfos(record) returns fieldinfo[] as
+	'$libdir/record_inspect', 'record_inspect_fieldinfos'
+language 'C' strict immutable;
+comment on function fieldinfos(record) is
+'Returns an array of <fieldinfo>s describing the record''s fields';
+create function fieldvalue(record, field name, defval anyelement, coerce boolean default true) returns anyelement as
+	'$libdir/record_inspect', 'record_inspect_fieldvalue'
+language 'C' immutable;
+comment on function fieldvalue(record, name, anyelement, boolean)  is
+'Returns the value of the field <field>, or <defval> should the value be null.
+If <coerce> is true, the value is coerced to <defval>''s type if possible,
+otherwise an error is raised if the field''s type and <defval>''s type differ.';
+create function fieldvalues(record, defval anyelement, coerce boolean default true) returns anyarray as
+	'$libdir/record_inspect', 'record_inspect_fieldvalues'
+language 'C' immutable;
+comment on  function fieldvalues(record, anyelement, boolean) is
+'Returns an array containing values of the record'' fields.
+NULL values are replaced by <defval>. If <coerce> is false, only
+the fields with the same type as <defval> are considered. Otherwise,
+the field'' values are coerced if possible, or an error is raised if not.';
+commit;
+create type ri_test_type as (s varchar, i int);
+create table ri_test_table (r ri_test_type, f char);
+insert into ri_test_table (r, f) values (row('foo', 1), 's');
+insert into ri_test_table (r, f) values (row('bar', 1), 'i');
+-- Get field infos for anonymous record type
+select record_inspect.fieldinfos(row('Hello, World', 'foobar'::varchar(3), i::text, i, i::bigint))
+	from generate_series(1,2) as i;
+                                             fieldinfos                                             
+----------------------------------------------------------------------------------------------------
+ {"(f1,unknown,)","(f2,\"character varying\",\"(3)\")","(f3,text,)","(f4,integer,)","(f5,bigint,)"}
+ {"(f1,unknown,)","(f2,\"character varying\",\"(3)\")","(f3,text,)","(f4,integer,)","(f5,bigint,)"}
+(2 rows)
+
+-- Get field infos for record in ri_test_table
+select record_inspect.fieldinfos(ri_test_table) from ri_test_table;
+                  fieldinfos                   
+-----------------------------------------------
+ {"(r,ri_test_type,)","(f,character,\"(1)\")"}
+ {"(r,ri_test_type,)","(f,character,\"(1)\")"}
+(2 rows)
+
+-- Get field specified by 'f' column
+select record_inspect.fieldvalue(ri_test_table.r, ri_test_table.f, NULL::text) from ri_test_table;
+ fieldvalue 
+------------
+ foo
+ 1
+(2 rows)
+
+-- Get field value as varchar(4) to check typmod handling
+-- NOTE: Currently does not work!
+select record_inspect.fieldvalue(row('Hello, World'), 'f1', NULL::varchar(4));
+  fieldvalue  
+--------------
+ Hello, World
+(1 row)
+
+-- Get field values for anonymous record type as regclass[]
+with rs as (values ('{pg_class}', array['pg_attribute']))
+select record_inspect.fieldvalue(r, 'column' || i, NULL::regclass[])
+	from rs as r,
+	     generate_series(1,2) as i;
+   fieldvalue   
+----------------
+ {pg_class}
+ {pg_attribute}
+(2 rows)
+
+-- Get field values for anonymous record type as regclass[]
+-- Should fail, since date[] cannot be coerced to regclass[]
+with rs as (values ('{pg_class}', array['pg_attribute'], array[now()]))
+select record_inspect.fieldvalue(r, 'column' || i, NULL::regclass[])
+	from rs as r,
+	     generate_series(1,3) as i;
+ERROR:  field "column3" of record type <record> has type <timestamp with time zone[]> which cannot be coerced to <regclass[]>
+-- Get field values of all integer fields for anonymous record type
+with rs as (values ('0', 1, '0'::text, 2, 3, 4::bigint))
+select record_inspect.fieldvalues(r, NULL::int, false)
+	from rs as r;
+ fieldvalues 
+-------------
+ {1,2,3}
+(1 row)
+
+-- Get field values of all fields as text for anonymous record type
+with rs as (values ('1', 2, '3'::text, 4, 5, 6::bigint))
+select record_inspect.fieldvalues(r, NULL::text)
+	from rs as r;
+  fieldvalues  
+---------------
+ {1,2,3,4,5,6}
+(1 row)
+
+-- Get field values of all fields as int for anonymous record type.
+-- Should fail, since dates cannot be coerced to ints
+with rs as (values ('1', 2, '3'::text, 4, 5, 6::bigint, now()))
+select record_inspect.fieldvalues(r, NULL::int)
+	from rs as r;
+ERROR:  field "column7" of record type <record> has type <timestamp with time zone> which cannot be coerced to <integer> but coercion was requested
+-- Trigger to output old record version as xml.
+create function log_old_xml() returns trigger as $body$
+declare
+	v_xml text;
+begin
+	v_xml := array_to_string(array(
+		select
+			'<' || f.fieldname || ' '
+				'type=' || quote_ident(f.fieldtype::text) ||
+				coalesce(
+					' mod="' || replace(f.fieldtypemod, '"', E'\\"') || '"',
+					''
+				) ||
+			'>' ||
+			replace(replace(
+				record_inspect.fieldvalue(OLD, f.fieldname, NULL::text),
+				'<', '&lt;'), '>', '&gt;'
+			) ||
+			'<' || f.fieldname || '/>'
+		from unnest(record_inspect.fieldinfos(OLD)) f
+	), '');
+	raise notice '% %', TG_OP, v_xml;
+	
+	RETURN NULL;
+end;
+$body$ language plpgsql stable;
+create table t(s varchar(20), i int, d date);
+create trigger t_log_old_xml after update or delete on t for each row execute procedure log_old_xml();
+insert into t (s,i,d) values ('One', 1, now());
+insert into t (s,i,d) values ('Two', 2, now());
+insert into t (s,i,d) values ('Three', 3, now());
+delete from t where i < 3;
+NOTICE:  DELETE <s type="character varying" mod="(20)">One<s/><i type="integer">1<i/><d type=date>12-20-2009<d/>
+NOTICE:  DELETE <s type="character varying" mod="(20)">Two<s/><i type="integer">2<i/><d type=date>12-20-2009<d/>
+alter table t drop column i;
+delete from t;
+NOTICE:  DELETE <s type="character varying" mod="(20)">Three<s/><d type=date>12-20-2009<d/>

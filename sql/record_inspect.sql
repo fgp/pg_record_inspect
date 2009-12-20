@@ -1,14 +1,23 @@
-drop schema if exists record_inspect_test cascade;
-create schema record_inspect_test;
+\i record_inspect.sql
 
-set search_path=record_inspect_test;
+create type ri_test_type as (s varchar, i int);
+create table ri_test_table (r ri_test_type, f char);
+
+insert into ri_test_table (r, f) values (row('foo', 1), 's');
+insert into ri_test_table (r, f) values (row('bar', 1), 'i');
 
 -- Get field infos for anonymous record type
 select record_inspect.fieldinfos(row('Hello, World', 'foobar'::varchar(3), i::text, i, i::bigint))
-	from generate_series(1,2) i;
-	
--- Get field value as varchar(4)
-select 'Hello, World'::varchar(4);
+	from generate_series(1,2) as i;
+
+-- Get field infos for record in ri_test_table
+select record_inspect.fieldinfos(ri_test_table) from ri_test_table;
+
+-- Get field specified by 'f' column
+select record_inspect.fieldvalue(ri_test_table.r, ri_test_table.f, NULL::text) from ri_test_table;
+
+-- Get field value as varchar(4) to check typmod handling
+-- NOTE: Currently does not work!
 select record_inspect.fieldvalue(row('Hello, World'), 'f1', NULL::varchar(4));
 
 -- Get field values for anonymous record type as regclass[]
