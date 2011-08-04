@@ -57,7 +57,7 @@ Datum record_inspect_fieldvalues(PG_FUNCTION_ARGS);
 static char * format_typmod(Oid typid, int32 typmod)
 {
 	HeapTuple	tp;
-	Oid			typmodout;
+	Oid			typmodout = InvalidOid;
 	char		*res;
 
 	/* Shouldn't be called if typmod is -1 */
@@ -520,9 +520,9 @@ Datum record_inspect_fieldvalue(PG_FUNCTION_ARGS)
 	/* Field (arg 1) */
 	bool			fieldname_null = PG_ARGISNULL(1);
 	NameData*		fieldname = fieldname_null ? 0 : PG_GETARG_NAME(1);
-	AttrNumber		field_attno;
-	Oid				field_typoid;
-	int32			field_typmod;
+	AttrNumber		field_attno = InvalidAttrNumber;
+	Oid				field_typoid = InvalidOid;
+	int32			field_typmod = -1;
 	Datum			fieldval;
 	bool			fieldval_null;
 	
