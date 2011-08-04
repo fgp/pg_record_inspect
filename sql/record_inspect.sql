@@ -28,7 +28,7 @@ select record_inspect.fieldvalue(r, 'column' || i, NULL::regclass[])
 
 -- Get field values for anonymous record type as regclass[]
 -- Should fail, since date[] cannot be coerced to regclass[]
-with rs as (values ('{pg_class}', array['pg_attribute'], array[now()]))
+with rs as (values ('{pg_class}', array['pg_attribute'], array[to_timestamp('2009-12-20', 'YYYY-MM-DD')]))
 select record_inspect.fieldvalue(r, 'column' || i, NULL::regclass[])
 	from rs as r,
 	     generate_series(1,3) as i;
@@ -45,7 +45,7 @@ select record_inspect.fieldvalues(r, NULL::text)
 
 -- Get field values of all fields as int for anonymous record type.
 -- Should fail, since dates cannot be coerced to ints
-with rs as (values ('1', 2, '3'::text, 4, 5, 6::bigint, now()))
+with rs as (values ('1', 2, '3'::text, 4, 5, 6::bigint, to_timestamp('2009-12-20', 'YYYY-MM-DD')))
 select record_inspect.fieldvalues(r, NULL::int)
 	from rs as r;
 
@@ -77,9 +77,9 @@ end;
 $body$ language plpgsql stable;
 create table t(s varchar(20), i int, d date);
 create trigger t_log_old_xml after update or delete on t for each row execute procedure log_old_xml();
-insert into t (s,i,d) values ('One', 1, now());
-insert into t (s,i,d) values ('Two', 2, now());
-insert into t (s,i,d) values ('Three', 3, now());
+insert into t (s,i,d) values ('One', 1, to_date('2009-12-20', 'YYYY-MM-DD'));
+insert into t (s,i,d) values ('Two', 2, to_date('2009-12-20', 'YYYY-MM-DD'));
+insert into t (s,i,d) values ('Three', 3, to_date('2009-12-20', 'YYYY-MM-DD'));
 delete from t where i < 3;
 alter table t drop column i;
 delete from t;
